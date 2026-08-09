@@ -5,6 +5,7 @@ LIB="${SPARK_LIB:-${HOME}/.local/lib/unsloth-spark-launchers/common.sh}"
 [[ -r "$LIB" ]] || { printf 'sparkcode: missing %s; reinstall the launchers\n' "$LIB" >&2; exit 1; }
 # shellcheck source=/dev/null
 source "$LIB"
+spark_parse_args "$@"
 spark_discover
 command -v opencode >/dev/null 2>&1 || spark_die "opencode is not on PATH"
 
@@ -19,18 +20,27 @@ else
   source_config="$config"
 fi
 
-jq --arg url "$SPARK_BASE_URL" --arg key "$SPARK_API_KEY" --arg model "$SPARK_MODEL" \
+jq --arg url "$SPARK_BASE_URL" --arg key "$SPARK_API_KEY" --arg model "$SPARK_MODEL" --arg effort "$SPARK_EFFORT" \
   --argjson context "$SPARK_CONTEXT" --argjson output "$SPARK_OUTPUT" '
   .provider = (.provider // {}) |
   .provider.unsloth = {
     npm: "@ai-sdk/openai-compatible",
     name: "Unsloth Studio",
     options: ({baseURL: $url} + (if $key == "" then {} else {apiKey: $key} end)),
-    models: {($model): {name: $model, limit: {context: $context, output: $output}}}
+    models: {($model): {
+      name: $model,
+      limit: {context: $context, output: $output},
+      options: {reasoningEffort: $effort},
+      variants: {
+        minimal: {reasoningEffort: "minimal"}, low: {reasoningEffort: "low"},
+        medium: {reasoningEffort: "medium"}, high: {reasoningEffort: "high"},
+        xhigh: {reasoningEffort: "xhigh"}, max: {reasoningEffort: "max"}
+      }
+    }}
   } |
   .model = ("unsloth/" + $model)
   ' "$source_config" >"${config}.new"
 mv "${config}.new" "$config"
 
 export OPENCODE_CONFIG="$config"
-opencode --model "unsloth/${SPARK_MODEL}" "$@"
+opencode --model "unsloth/${SPARK_MODEL}" "${SPARK_ARGS[@]}"

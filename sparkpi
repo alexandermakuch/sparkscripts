@@ -5,6 +5,7 @@ LIB="${SPARK_LIB:-${HOME}/.local/lib/unsloth-spark-launchers/common.sh}"
 [[ -r "$LIB" ]] || { printf 'sparkpi: missing %s; reinstall the launchers\n' "$LIB" >&2; exit 1; }
 # shellcheck source=/dev/null
 source "$LIB"
+spark_parse_args "$@"
 spark_discover
 command -v pi >/dev/null 2>&1 || spark_die "pi is not on PATH"
 
@@ -37,4 +38,4 @@ if [[ -e "$runtime_config" ]]; then backup="$(mktemp "${TMPDIR:-/tmp}/sparkpi-ba
 cp "$config" "$runtime_config"
 restore() { if [[ -n "$backup" ]]; then cp "$backup" "$runtime_config"; rm -f "$backup"; else rm -f "$runtime_config"; fi; rm -f "$config"; }
 trap restore EXIT HUP INT TERM
-pi --provider unsloth --model "$SPARK_MODEL" "$@"
+pi --provider unsloth --model "$SPARK_MODEL" --thinking "$SPARK_EFFORT" "${SPARK_ARGS[@]}"

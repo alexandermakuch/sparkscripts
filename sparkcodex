@@ -5,18 +5,55 @@ LIB="${SPARK_LIB:-${HOME}/.local/lib/unsloth-spark-launchers/common.sh}"
 [[ -r "$LIB" ]] || { printf 'sparkcodex: missing %s; reinstall the launchers\n' "$LIB" >&2; exit 1; }
 # shellcheck source=/dev/null
 source "$LIB"
+spark_parse_args "$@"
 spark_discover
 command -v codex >/dev/null 2>&1 || spark_die "codex is not on PATH"
 
 toml_string() { jq -Rn --arg value "$1" '$value'; }
 url_toml="$(toml_string "$SPARK_BASE_URL")"
 model_toml="$(toml_string "$SPARK_MODEL")"
+catalog="$(mktemp "${TMPDIR:-/tmp}/sparkcodex-catalog.XXXXXX")"
+cleanup() { rm -f "$catalog"; }
+trap cleanup EXIT HUP INT TERM
+
+# Clone Codex's complete bundled metadata shape, then replace the fields that
+# are specific to the dynamically discovered local model.
+codex debug models --bundled | jq \
+  --arg slug "$SPARK_MODEL" \
+  --argjson context "$SPARK_CONTEXT" '
+  .models[0] as $template |
+  .models = [($template |
+    .slug = $slug |
+    .display_name = $slug |
+    .description = "Model loaded in Unsloth Studio" |
+    .default_reasoning_level = "high" |
+    .supported_reasoning_levels = [
+      {effort: "minimal", description: "Minimal reasoning"},
+      {effort: "low", description: "Low reasoning"},
+      {effort: "medium", description: "Medium reasoning"},
+      {effort: "high", description: "High reasoning"},
+      {effort: "xhigh", description: "Extra-high reasoning"},
+      {effort: "max", description: "Maximum reasoning"}
+    ] |
+    .context_window = $context |
+    .max_context_window = $context |
+    .effective_context_window_percent = 95 |
+    .additional_speed_tiers = [] |
+    .service_tiers = [] |
+    .availability_nux = null |
+    .upgrade = null
+  )]
+  ' >"$catalog"
+catalog_toml="$(toml_string "$catalog")"
 export SPARK_API_KEY
-exec codex \
+codex \
   -c "model_provider=\"unsloth\"" \
   -c "model=${model_toml}" \
+  -c "model_reasoning_effort=\"${SPARK_EFFORT}\"" \
+  -c "model_context_window=${SPARK_CONTEXT}" \
+  -c "model_catalog_json=${catalog_toml}" \
   -c "model_providers.unsloth.name=\"Unsloth Studio\"" \
   -c "model_providers.unsloth.base_url=${url_toml}" \
   -c "model_providers.unsloth.env_key=\"SPARK_API_KEY\"" \
   -c "model_providers.unsloth.wire_api=\"responses\"" \
-  "$@"
+  "${SPARK_ARGS[@]}"

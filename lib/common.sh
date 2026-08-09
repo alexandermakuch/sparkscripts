@@ -5,6 +5,37 @@ spark_die() {
   exit 1
 }
 
+spark_parse_args() {
+  SPARK_EFFORT="${SPARK_EFFORT:-high}"
+  SPARK_ARGS=()
+  while (( $# > 0 )); do
+    case "$1" in
+      --effort)
+        (( $# > 1 )) || spark_die "--effort requires a value"
+        SPARK_EFFORT="$2"
+        shift 2
+        ;;
+      --effort=*)
+        SPARK_EFFORT="${1#*=}"
+        shift
+        ;;
+      --)
+        shift
+        SPARK_ARGS+=("$@")
+        break
+        ;;
+      *)
+        SPARK_ARGS+=("$1")
+        shift
+        ;;
+    esac
+  done
+  case "$SPARK_EFFORT" in
+    minimal|low|medium|high|xhigh|max) ;;
+    *) spark_die "invalid effort '${SPARK_EFFORT}' (use minimal, low, medium, high, xhigh, or max)" ;;
+  esac
+}
+
 spark_discover() {
   command -v curl >/dev/null 2>&1 || spark_die "curl is required"
   command -v jq >/dev/null 2>&1 || spark_die "jq is required"
@@ -48,5 +79,5 @@ spark_discover() {
   [[ "$SPARK_CONTEXT" =~ ^[1-9][0-9]*$ ]] || SPARK_CONTEXT=100000
   [[ "$SPARK_OUTPUT" =~ ^[1-9][0-9]*$ ]] || SPARK_OUTPUT=4096
 
-  printf '%s: using %s at %s\n' "$SPARK_COMMAND" "$SPARK_MODEL" "$SPARK_BASE_URL" >&2
+  printf '%s: using %s at %s (%s effort)\n' "$SPARK_COMMAND" "$SPARK_MODEL" "$SPARK_BASE_URL" "$SPARK_EFFORT" >&2
 }

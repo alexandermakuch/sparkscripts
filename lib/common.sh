@@ -8,6 +8,7 @@ spark_die() {
 spark_parse_args() {
   SPARK_EFFORT="${SPARK_EFFORT:-high}"
   SPARK_ARGS=()
+  SPARK_ARGC=0
   while (( $# > 0 )); do
     case "$1" in
       --effort)
@@ -22,10 +23,12 @@ spark_parse_args() {
       --)
         shift
         SPARK_ARGS+=("$@")
+        SPARK_ARGC=${#SPARK_ARGS[@]}
         break
         ;;
       *)
         SPARK_ARGS+=("$1")
+        SPARK_ARGC=$((SPARK_ARGC + 1))
         shift
         ;;
     esac

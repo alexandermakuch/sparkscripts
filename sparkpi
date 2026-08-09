@@ -38,4 +38,8 @@ if [[ -e "$runtime_config" ]]; then backup="$(mktemp "${TMPDIR:-/tmp}/sparkpi-ba
 cp "$config" "$runtime_config"
 restore() { if [[ -n "$backup" ]]; then cp "$backup" "$runtime_config"; rm -f "$backup"; else rm -f "$runtime_config"; fi; rm -f "$config"; }
 trap restore EXIT HUP INT TERM
-pi --provider unsloth --model "$SPARK_MODEL" --thinking "$SPARK_EFFORT" "${SPARK_ARGS[@]}"
+if (( SPARK_ARGC > 0 )); then
+  pi --provider unsloth --model "$SPARK_MODEL" --thinking "$SPARK_EFFORT" "${SPARK_ARGS[@]}"
+else
+  pi --provider unsloth --model "$SPARK_MODEL" --thinking "$SPARK_EFFORT"
+fi

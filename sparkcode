@@ -43,4 +43,8 @@ jq --arg url "$SPARK_BASE_URL" --arg key "$SPARK_API_KEY" --arg model "$SPARK_MO
 mv "${config}.new" "$config"
 
 export OPENCODE_CONFIG="$config"
-opencode --model "unsloth/${SPARK_MODEL}" "${SPARK_ARGS[@]}"
+if (( SPARK_ARGC > 0 )); then
+  opencode --model "unsloth/${SPARK_MODEL}" "${SPARK_ARGS[@]}"
+else
+  opencode --model "unsloth/${SPARK_MODEL}"
+fi

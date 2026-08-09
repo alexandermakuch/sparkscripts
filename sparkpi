@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SPARK_COMMAND=sparkpi
+LIB="${SPARK_LIB:-${HOME}/.local/lib/unsloth-spark-launchers/common.sh}"
+[[ -r "$LIB" ]] || { printf 'sparkpi: missing %s; reinstall the launchers\n' "$LIB" >&2; exit 1; }
+# shellcheck source=/dev/null
+source "$LIB"
+spark_discover
+command -v pi >/dev/null 2>&1 || spark_die "pi is not on PATH"
+
+config="$(mktemp "${TMPDIR:-/tmp}/sparkpi.XXXXXX")"
+cleanup() { rm -f "$config"; }
+trap cleanup EXIT HUP INT TERM
+source_config="${PI_CODING_AGENT_DIR:-${HOME}/.pi/agent}/models.json"
+[[ ! -f "$source_config" ]] || jq -e . "$source_config" >/dev/null || spark_die "$source_config is not valid JSON"
+
+if [[ -f "$source_config" ]]; then cp "$source_config" "$config"; else printf '{}\n' >"$config"; fi
+jq --arg url "$SPARK_BASE_URL" --arg key "$SPARK_API_KEY" --arg model "$SPARK_MODEL" \
+  --argjson context "$SPARK_CONTEXT" --argjson output "$SPARK_OUTPUT" '
+  .providers = (.providers // {}) |
+  .providers.unsloth = {
+    name: "Unsloth Studio", baseUrl: $url, api: "openai-completions",
+    apiKey: $key, authHeader: true,
+    models: [{id: $model, name: $model, reasoning: false, input: ["text"],
+      contextWindow: $context, maxTokens: $output,
+      cost: {input: 0, output: 0, cacheRead: 0, cacheWrite: 0},
+      compat: {supportsDeveloperRole: false, supportsReasoningEffort: false, maxTokensField: "max_tokens"}}]
+  }
+  ' "$config" >"${config}.new"
+mv "${config}.new" "$config"
+
+agent_dir="$(dirname "$source_config")"
+mkdir -p "$agent_dir"
+runtime_config="${agent_dir}/models.json"
+backup=""
+if [[ -e "$runtime_config" ]]; then backup="$(mktemp "${TMPDIR:-/tmp}/sparkpi-backup.XXXXXX")"; cp "$runtime_config" "$backup"; fi
+cp "$config" "$runtime_config"
+restore() { if [[ -n "$backup" ]]; then cp "$backup" "$runtime_config"; rm -f "$backup"; else rm -f "$runtime_config"; fi; rm -f "$config"; }
+trap restore EXIT HUP INT TERM
+pi --provider unsloth --model "$SPARK_MODEL" "$@"

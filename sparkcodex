@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SPARK_COMMAND=sparkcodex
+LIB="${SPARK_LIB:-${HOME}/.local/lib/unsloth-spark-launchers/common.sh}"
+[[ -r "$LIB" ]] || { printf 'sparkcodex: missing %s; reinstall the launchers\n' "$LIB" >&2; exit 1; }
+# shellcheck source=/dev/null
+source "$LIB"
+spark_discover
+command -v codex >/dev/null 2>&1 || spark_die "codex is not on PATH"
+
+toml_string() { jq -Rn --arg value "$1" '$value'; }
+url_toml="$(toml_string "$SPARK_BASE_URL")"
+model_toml="$(toml_string "$SPARK_MODEL")"
+export SPARK_API_KEY
+exec codex \
+  -c "model_provider=\"unsloth\"" \
+  -c "model=${model_toml}" \
+  -c "model_providers.unsloth.name=\"Unsloth Studio\"" \
+  -c "model_providers.unsloth.base_url=${url_toml}" \
+  -c "model_providers.unsloth.env_key=\"SPARK_API_KEY\"" \
+  -c "model_providers.unsloth.wire_api=\"responses\"" \
+  "$@"

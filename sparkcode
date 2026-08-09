@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SPARK_COMMAND=sparkcode
+LIB="${SPARK_LIB:-${HOME}/.local/lib/unsloth-spark-launchers/common.sh}"
+[[ -r "$LIB" ]] || { printf 'sparkcode: missing %s; reinstall the launchers\n' "$LIB" >&2; exit 1; }
+# shellcheck source=/dev/null
+source "$LIB"
+spark_discover
+command -v opencode >/dev/null 2>&1 || spark_die "opencode is not on PATH"
+
+config="$(mktemp "${TMPDIR:-/tmp}/sparkcode.XXXXXX")"
+cleanup() { rm -f "$config"; }
+trap cleanup EXIT HUP INT TERM
+source_config="${OPENCODE_CONFIG:-${HOME}/.config/opencode/opencode.json}"
+if [[ -f "$source_config" ]]; then
+  jq -e . "$source_config" >/dev/null || spark_die "$source_config is not valid JSON"
+else
+  printf '{}\n' >"$config"
+  source_config="$config"
+fi
+
+jq --arg url "$SPARK_BASE_URL" --arg key "$SPARK_API_KEY" --arg model "$SPARK_MODEL" \
+  --argjson context "$SPARK_CONTEXT" --argjson output "$SPARK_OUTPUT" '
+  .provider = (.provider // {}) |
+  .provider.unsloth = {
+    npm: "@ai-sdk/openai-compatible",
+    name: "Unsloth Studio",
+    options: ({baseURL: $url} + (if $key == "" then {} else {apiKey: $key} end)),
+    models: {($model): {name: $model, limit: {context: $context, output: $output}}}
+  } |
+  .model = ("unsloth/" + $model)
+  ' "$source_config" >"${config}.new"
+mv "${config}.new" "$config"
+
+export OPENCODE_CONFIG="$config"
+opencode --model "unsloth/${SPARK_MODEL}" "$@"
